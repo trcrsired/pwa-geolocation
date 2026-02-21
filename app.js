@@ -2,6 +2,7 @@
 // UI ELEMENTS
 // ------------------------------------------------------------
 const speedEl = document.getElementById("speed");
+const tsEl = document.getElementById("ts");
 const latEl = document.getElementById("lat");
 const lonEl = document.getElementById("lon");
 const altEl = document.getElementById("alt");
@@ -117,6 +118,7 @@ function startWatching() {
       const { latitude, longitude, altitude, accuracy } = pos.coords;
 
       // Update UI
+      tsEl.textContent = new Date(pos.timestamp).toISOString();
       latEl.textContent = latitude;
       lonEl.textContent = longitude;
       altEl.textContent = altitude ?? "N/A";
