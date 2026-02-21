@@ -1,7 +1,8 @@
 // ------------------------------------------------------------
-// CONFIGURATION
+// CONFIGURABLE WINDOWS (in ms)
 // ------------------------------------------------------------
-const FREEZE_THRESHOLD = 30 * 1000; // 30 seconds
+let START_WINDOW = 15 * 1000;    // 15 seconds
+let DISCARD_WINDOW = 30 * 1000; // 30 seconds
 
 // ------------------------------------------------------------
 // UI ELEMENTS
@@ -14,6 +15,7 @@ const accEl = document.getElementById("acc");
 const tsEl = document.getElementById("ts");
 const placeEl = document.getElementById("place");
 const rawEl = document.getElementById("raw");
+
 const highAccuracyCheckbox = document.getElementById("highAccuracy");
 
 // ------------------------------------------------------------
@@ -22,15 +24,25 @@ const highAccuracyCheckbox = document.getElementById("highAccuracy");
 let useHighAccuracy = localStorage.getItem("highAccuracy") === "false" ? false : true;
 let watchId = null;
 
-let lastPos = null;
-let lastMovementTime = null;
-let lastSpeed = 0;
+// All points within DISCARD_WINDOW
+let fullHistory = []; // { t, lat, lon, acc }
 
+// Points within START_WINDOW
+let startQueue = []; // subset of fullHistory
+
+// Speed samples (computed from averaged start → current)
+let speedSamples = []; // { t, v }
+
+// Last good position (for UI fallback)
+let lastGoodPos = null;
+let lastGoodTime = null;
+
+// Reverse geocode timer
 let lastReverseGeocodeTime = 0;
 const REVERSE_GEOCODE_INTERVAL = 10 * 60 * 1000;
 
 // ------------------------------------------------------------
-// INITIALIZE CHECKBOX
+// RESTORE UI STATE
 // ------------------------------------------------------------
 if (highAccuracyCheckbox) {
   highAccuracyCheckbox.checked = useHighAccuracy;
@@ -61,6 +73,87 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ------------------------------------------------------------
+// HISTORY MANAGEMENT
+// ------------------------------------------------------------
+function addPoint(pos) {
+  const t = pos.timestamp;
+  const { latitude, longitude, accuracy } = pos.coords;
+
+  const p = { t, lat: latitude, lon: longitude, acc: accuracy };
+
+  fullHistory.push(p);
+
+  const now = Date.now();
+
+  // Remove points older than DISCARD_WINDOW
+  fullHistory = fullHistory.filter(pt => now - pt.t <= DISCARD_WINDOW);
+
+  // Maintain startQueue (points within START_WINDOW)
+  startQueue = fullHistory.filter(pt => now - pt.t <= START_WINDOW);
+}
+
+// ------------------------------------------------------------
+// COMPUTE AVERAGED STARTING POINT
+// ------------------------------------------------------------
+function computeStartPoint(currentPoint) {
+  const N = startQueue.length;
+
+  if (N === 0) {
+    return fullHistory.length > 0 ? fullHistory[0] : currentPoint;
+  }
+
+  // If we haven't reached START_WINDOW, exclude current point
+  let pts = startQueue;
+  if (Date.now() - startQueue[0].t < START_WINDOW && N > 1) {
+    pts = startQueue.slice(0, -1);
+  }
+
+  let sumLat = 0;
+  let sumLon = 0;
+  let sumT = 0;
+
+  for (const p of pts) {
+    sumLat += p.lat;
+    sumLon += p.lon;
+    sumT += p.t;
+  }
+
+  const M = pts.length;
+
+  return {
+    lat: sumLat / M,
+    lon: sumLon / M,
+    t: sumT / M
+  };
+}
+
+// ------------------------------------------------------------
+// COMPUTE SPEED SAMPLE (statistical fallback)
+// ------------------------------------------------------------
+function computeSpeedSample(start, current) {
+  const d = distanceMeters(start.lat, start.lon, current.lat, current.lon);
+  const dt = (current.t - start.t) / 1000;
+
+  if (dt <= 0) return 0;
+  return d / dt;
+}
+
+// ------------------------------------------------------------
+// COMPUTE DISPLAY SPEED (average of last START_WINDOW samples)
+// ------------------------------------------------------------
+function computeDisplaySpeed() {
+  const now = Date.now();
+  const recent = speedSamples.filter(s => now - s.t <= START_WINDOW);
+
+  if (recent.length === 0) return 0;
+
+  let sum = 0;
+  for (const s of recent) sum += s.v;
+
+  return sum / recent.length;
+}
+
+// ------------------------------------------------------------
 // REVERSE GEOCODING
 // ------------------------------------------------------------
 async function reverseGeocode(lat, lon) {
@@ -71,7 +164,9 @@ async function reverseGeocode(lat, lon) {
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     const res = await fetch(url, {
-      headers: { "User-Agent": "pwa-geolocation/1.0" },
+      headers: {
+        "User-Agent": "pwa-geolocation/1.0"
+      },
       signal: controller.signal
     });
 
@@ -91,10 +186,11 @@ async function reverseGeocode(lat, lon) {
 // POSITION HANDLING
 // ------------------------------------------------------------
 function handlePosition(pos) {
-  const { latitude, longitude, altitude, accuracy, speed } = pos.coords;
-  const now = Date.now();
+  lastGoodPos = pos;
+  lastGoodTime = Date.now();
 
-  // Update UI raw fields
+  const { latitude, longitude, altitude, accuracy, speed } = pos.coords;
+
   tsEl.textContent = new Date(pos.timestamp).toISOString();
   latEl.textContent = latitude;
   lonEl.textContent = longitude;
@@ -102,54 +198,49 @@ function handlePosition(pos) {
   accEl.textContent = accuracy;
   rawEl.textContent = JSON.stringify(pos, null, 2);
 
+  // Add to history
+  addPoint(pos);
+
   // If GNSS provides speed, use it directly
+  let v;
+  let useNativeSpeed = false;
+
   if (speed !== null && !isNaN(speed) && speed > 0) {
-    lastSpeed = speed;
+    v = speed; // m/s
+    useNativeSpeed = true;
   } else {
-    // Otherwise compute instantaneous speed
-    if (lastPos) {
-      const sameLocation =
-        lastPos.lat === latitude &&
-        lastPos.lon === longitude;
-
-      if (sameLocation) {
-        // Location did not change
-        if (now - lastMovementTime >= FREEZE_THRESHOLD) {
-          // Treat as not moving
-          lastSpeed = 0;
-        }
-        // else: treat as moving, keep lastSpeed unchanged
-      } else {
-        // Location changed → compute speed
-        const d = distanceMeters(lastPos.lat, lastPos.lon, latitude, longitude);
-        const dt = (pos.timestamp - lastPos.t) / 1000;
-
-        if (dt > 0) {
-          lastSpeed = d / dt;
-        }
-
-        lastMovementTime = now;
-      }
-    } else {
-      // First point
-      lastMovementTime = now;
-      lastSpeed = 0;
-    }
+    // Otherwise use statistical model
+    const start = computeStartPoint(pos);
+    const current = { lat: latitude, lon: longitude, t: pos.timestamp };
+    v = computeSpeedSample(start, current);
   }
 
-  // Save current point
-  lastPos = { lat: latitude, lon: longitude, t: pos.timestamp };
+  // Add speed sample
+  speedSamples.push({ t: Date.now(), v });
 
-  // Display speed (no formatting)
-  const kmh = lastSpeed * 3.6;
-  const mph = lastSpeed * 2.23694;
+  // Compute display speed
+  let displaySpeed;
 
+  if (useNativeSpeed) {
+    // If GNSS speed exists, ALWAYS display it directly
+    displaySpeed = v;
+  } else {
+    // Otherwise display statistical average
+    displaySpeed = computeDisplaySpeed();
+  }
+
+  const kmh = displaySpeed * 3.6;
+  const mph = displaySpeed * 2.23694;
+
+  // Multi-line output, no toFixed
   speedEl.innerHTML =
-    lastSpeed + " m/s<br>" +
+    displaySpeed + " m/s<br>" +
     kmh + " km/h<br>" +
     mph + " mph";
 
+
   // Reverse geocode occasionally
+  const now = Date.now();
   if (now - lastReverseGeocodeTime > REVERSE_GEOCODE_INTERVAL) {
     lastReverseGeocodeTime = now;
     reverseGeocode(latitude, longitude).then(name => {
@@ -159,7 +250,10 @@ function handlePosition(pos) {
 }
 
 function handleError(err) {
-  speedEl.textContent = "N/A";
+  const now = Date.now();
+  if (!lastGoodTime || now - lastGoodTime > 10 * 60 * 1000) {
+    speedEl.textContent = "N/A";
+  }
 }
 
 // ------------------------------------------------------------
