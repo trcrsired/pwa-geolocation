@@ -172,12 +172,12 @@ function startWatching() {
       }
     },
     err => {
-      speedEl.textContent = "Error: " + err.message;
+      speedEl.textContent = "N/A";
     },
     {
       enableHighAccuracy: useHighAccuracy,
       maximumAge: 500,
-      timeout: 5000
+      timeout: 50000
     }
   );
 }
@@ -186,3 +186,67 @@ function startWatching() {
 // INIT
 // ------------------------------------------------------------
 startWatching();
+
+
+// ------------------------------------------------------------
+// DIRECTION / HEADING (Compass)
+// ------------------------------------------------------------
+const headingEl = document.getElementById("heading");
+
+// Try Generic Sensor API first
+function startCompassSensor() {
+  if ("AbsoluteOrientationSensor" in window) {
+    try {
+      const sensor = new AbsoluteOrientationSensor({ frequency: 30 });
+      sensor.addEventListener("reading", () => {
+        const q = sensor.quaternion;
+        if (!q) return;
+
+        // Convert quaternion → yaw (heading)
+        const [x, y, z, w] = q;
+
+        const siny = 2 * (w * z + x * y);
+        const cosy = 1 - 2 * (y * y + z * z);
+        let heading = Math.atan2(siny, cosy) * (180 / Math.PI);
+
+        if (heading < 0) heading += 360;
+
+        headingEl.textContent = heading.toFixed(1);
+      });
+
+      sensor.addEventListener("error", () => {
+        console.warn("Orientation sensor error");
+      });
+
+      sensor.start();
+      return true;
+
+    } catch (e) {
+      console.warn("AbsoluteOrientationSensor failed:", e);
+      return false;
+    }
+  }
+
+  return false;
+}
+
+// Fallback: DeviceOrientationEvent
+function startCompassFallback() {
+  if (!("DeviceOrientationEvent" in window)) {
+    headingEl.textContent = "N/A";
+    return;
+  }
+
+  window.addEventListener("deviceorientation", e => {
+    if (e.absolute === true && e.alpha != null) {
+      let heading = 360 - e.alpha; // alpha is clockwise from north
+      if (heading < 0) heading += 360;
+      headingEl.textContent = heading.toFixed(1);
+    }
+  });
+}
+
+// Start direction sensing
+if (!startCompassSensor()) {
+  startCompassFallback();
+}
