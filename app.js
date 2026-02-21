@@ -20,7 +20,9 @@ let unit = localStorage.getItem("unit") || "metric";
 let useHighAccuracy = localStorage.getItem("highAccuracy") === "false" ? false : true;
 
 let watchId = null;
-let history = []; // last 5 raw pos objects
+
+// Store all GPS points from the last 30 seconds
+let pointHistory = []; // { pos, timestamp }
 
 let lastReverseGeocodeTime = 0;
 const REVERSE_GEOCODE_INTERVAL = 10 * 60 * 1000; // 10 minutes
@@ -68,44 +70,57 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ------------------------------------------------------------
-// ACCURACY-AWARE SPEED FROM LAST 5 POINTS
+// SPEED ENGINE — 30-second baseline method
 // ------------------------------------------------------------
-function computeSpeedFromHistory() {
-  if (history.length < 2) return 0;
+function addPoint(pos) {
+  const now = Date.now();
+  pointHistory.push({ pos, timestamp: now });
 
-  let totalDist = 0;
-  let totalTime = 0;
+  // Keep only last 30 seconds
+  pointHistory = pointHistory.filter(p => now - p.timestamp <= 30000);
+}
 
-  for (let i = 1; i < history.length; i++) {
-    const p1 = history[i - 1];
-    const p2 = history[i];
+function computeSpeed30s() {
+  const now = Date.now();
+  if (pointHistory.length < 2) return 0;
 
-    const lat1 = p1.coords.latitude;
-    const lon1 = p1.coords.longitude;
-    const lat2 = p2.coords.latitude;
-    const lon2 = p2.coords.longitude;
+  // Target time: 30 seconds ago
+  const targetTime = now - 30000;
 
-    const acc1 = p1.coords.accuracy || 0;
-    const acc2 = p2.coords.accuracy || 0;
+  let best = null;
+  let bestDiff = Infinity;
 
-    const dist = distanceMeters(lat1, lon1, lat2, lon2);
-    const dt = (p2.timestamp - p1.timestamp) / 1000;
-
-    if (dt <= 0) continue;
-
-    const combinedAccuracy = acc1 + acc2;
-    const effectiveDist = Math.max(0, dist - combinedAccuracy);
-
-    totalDist += effectiveDist;
-    totalTime += dt;
+  for (const p of pointHistory) {
+    const diff = Math.abs(p.timestamp - targetTime);
+    if (diff < bestDiff) {
+      best = p;
+      bestDiff = diff;
+    }
   }
 
-  if (totalTime === 0) return 0;
-  return totalDist / totalTime;
+  // Fallback: earliest point
+  if (!best) best = pointHistory[0];
+
+  const p1 = best.pos;
+  const p2 = pointHistory[pointHistory.length - 1].pos;
+
+  const lat1 = p1.coords.latitude;
+  const lon1 = p1.coords.longitude;
+  const lat2 = p2.coords.latitude;
+  const lon2 = p2.coords.longitude;
+
+  const dt = (p2.timestamp - p1.timestamp) / 1000;
+  if (dt <= 0) return 0;
+
+  // Skip extremely inaccurate points
+  if (p1.coords.accuracy > 100 || p2.coords.accuracy > 100) return 0;
+
+  const dist = distanceMeters(lat1, lon1, lat2, lon2);
+  return dist / dt;
 }
 
 // ------------------------------------------------------------
-// REVERSE GEOCODING (OpenStreetMap)
+// REVERSE GEOCODING
 // ------------------------------------------------------------
 async function reverseGeocode(lat, lon) {
   const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
@@ -149,19 +164,21 @@ function startWatching() {
 
       rawEl.textContent = JSON.stringify(pos, null, 2);
 
-      history.push(pos);
-      if (history.length > 5) history.shift();
+      // Add point to 30s history
+      addPoint(pos);
 
-      const s = computeSpeedFromHistory();
+      // Compute speed using 30-second baseline
+      const s = computeSpeed30s();
       const kmh = s * 3.6;
       const mph = s * 2.23694;
 
-      if (unit === "metric") {
-        speedEl.textContent = `${s} m/s (${kmh} km/h)`;
-      } else {
-        speedEl.textContent = `${s} m/s (${kmh} km/h, ${mph} mph)`;
-      }
+      // MULTI-LINE SPEED OUTPUT
+      speedEl.innerHTML =
+        `${s} m/s<br>` +
+        `${kmh} km/h<br>` +
+        `${mph} mph`;
 
+      // Reverse geocode occasionally
       const now = Date.now();
       if (now - lastReverseGeocodeTime > REVERSE_GEOCODE_INTERVAL) {
         lastReverseGeocodeTime = now;
