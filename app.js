@@ -234,7 +234,7 @@ function handlePosition(pos) {
 
   // Multi-line output, no toFixed
   speedEl.innerHTML =
-    "<br>m/s:<br>" + displaySpeed + "<br>km/h:<br>" +
+    "m/s:<br>" + displaySpeed + "<br>km/h:<br>" +
     kmh + "<br>mph:<br>" +
     mph;
 

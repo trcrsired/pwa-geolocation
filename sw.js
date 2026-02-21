@@ -1,7 +1,7 @@
 // -------------------------------
 //  CONFIG
 // -------------------------------
-const CACHE_NAME = "pwa-geolocation-v33";
+const CACHE_NAME = "pwa-geolocation-v34";
 
 // Files to cache
 const ASSETS = [
