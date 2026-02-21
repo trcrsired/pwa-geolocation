@@ -2,7 +2,7 @@
 // CONFIGURABLE WINDOWS (in ms)
 // ------------------------------------------------------------
 let START_WINDOW = 30 * 1000;    // 30 seconds
-let DISCARD_WINDOW = 10 * 60 * 1000; // 10 minutes
+let DISCARD_WINDOW = 2 * 60 * 1000; // 2 minutes
 
 // ------------------------------------------------------------
 // UI ELEMENTS
