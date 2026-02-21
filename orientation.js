@@ -176,4 +176,3 @@ async function startOrientation() {
 }
 
 startOrientation();
-
