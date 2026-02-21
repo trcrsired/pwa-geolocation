@@ -153,11 +153,27 @@ function handleAlphaFallback(e) {
 
 async function startOrientation() {
   const magOK = await tryMagnetometer();
+  if (magOK) return;
 
-  if (!magOK) {
-    window.addEventListener("deviceorientationabsolute", handleAbsoluteOrientation);
-    window.addEventListener("deviceorientation", handleAlphaFallback);
+  // Magnetometer unavailable → try absolute orientation first
+  let absoluteFired = false;
+
+  function absoluteHandler(e) {
+    absoluteFired = true;
+    handleAbsoluteOrientation(e);
   }
+
+  window.addEventListener("deviceorientationabsolute", absoluteHandler);
+
+  // Wait 300ms to see if absolute orientation fires
+  setTimeout(() => {
+    if (!absoluteFired) {
+      // Absolute orientation not supported → use alpha fallback
+      window.removeEventListener("deviceorientationabsolute", absoluteHandler);
+      window.addEventListener("deviceorientation", handleAlphaFallback);
+    }
+  }, 300);
 }
 
 startOrientation();
+
