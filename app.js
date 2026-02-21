@@ -76,22 +76,37 @@ function computeSpeedFromHistory() {
   let totalDist = 0;
   let totalTime = 0;
 
-  for (let i = 1; i < history.length; i++) {
+  for (let i = 1; i < history.length; ++i) {
     const p1 = history[i - 1];
     const p2 = history[i];
 
-    const dist = distanceMeters(p1.lat, p1.lon, p2.lat, p2.lon);
+    const lat1 = p1.coords.latitude;
+    const lon1 = p1.coords.longitude;
+    const lat2 = p2.coords.latitude;
+    const lon2 = p2.coords.longitude;
+
+    const acc1 = p1.coords.accuracy || 0;
+    const acc2 = p2.coords.accuracy || 0;
+
+    const dist = distanceMeters(lat1, lon1, lat2, lon2);
     const dt = (p2.timestamp - p1.timestamp) / 1000;
 
-    if (dt > 0) {
-      totalDist += dist;
-      totalTime += dt;
-    }
+    if (dt <= 0) continue;
+
+    // Combined accuracy envelope
+    const combinedAccuracy = acc1 + acc2;
+
+    // Effective distance: subtract noise radius
+    const effectiveDist = Math.max(0, dist - combinedAccuracy);
+
+    totalDist += effectiveDist;
+    totalTime += dt;
   }
 
   if (totalTime === 0) return 0;
   return totalDist / totalTime; // m/s
 }
+
 
 // ------------------------------------------------------------
 // START WATCHING POSITION
@@ -108,11 +123,8 @@ function startWatching() {
       accEl.textContent = accuracy;
 
       // Add to history
-      history.push({
-        lat: latitude,
-        lon: longitude,
-        timestamp: pos.timestamp
-      });
+      history.push(pos);
+
 
       // Keep only last 5 points
       if (history.length > 5) history.shift();
@@ -132,12 +144,12 @@ function startWatching() {
       rawEl.textContent = JSON.stringify(pos, null, 2);
     },
     err => {
-      speedEl.textContent = "Error: " + err.message;
+      speedEl.textContent = "N/A";
     },
     {
       enableHighAccuracy: useHighAccuracy,
       maximumAge: 500,
-      timeout: 5000
+      timeout: 50000
     }
   );
 }
