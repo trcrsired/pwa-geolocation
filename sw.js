@@ -1,9 +1,9 @@
 // -------------------------------
 //  CONFIG
 // -------------------------------
-const CACHE_NAME = "pwa-geolocation-v1";
+const CACHE_NAME = "pwa-geolocation-v2";
 
-// Files to cache (NO index.html!)
+// Files to cache
 const ASSETS = [
   "/",
   "/app.js",
