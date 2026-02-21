@@ -205,7 +205,7 @@ function handlePosition(pos) {
   let v;
   let useNativeSpeed = false;
 
-  if (speed !== null && !isNaN(speed) && speed > 0) {
+  if (speed !== null) {
     v = speed; // m/s
     useNativeSpeed = true;
   } else {
