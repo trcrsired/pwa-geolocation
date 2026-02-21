@@ -10,49 +10,36 @@ const tsEl = document.getElementById("ts");
 const placeEl = document.getElementById("place");
 const rawEl = document.getElementById("raw");
 
-const unitRadios = document.querySelectorAll("input[name='unit']");
 const highAccuracyCheckbox = document.getElementById("highAccuracy");
 
 // ------------------------------------------------------------
 // STATE
 // ------------------------------------------------------------
-let unit = localStorage.getItem("unit") || "metric";
 let useHighAccuracy = localStorage.getItem("highAccuracy") === "false" ? false : true;
-
 let watchId = null;
 
-// Store all GPS points from the last 30 seconds
-let pointHistory = []; // { pos, timestamp }
+// Store points for regression (e.g. last 2 minutes)
+let pointHistory = []; // { t, lat, lon, acc }
 
 let lastReverseGeocodeTime = 0;
 const REVERSE_GEOCODE_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const HISTORY_WINDOW_MS = 120000; // 2 minutes
 
 // ------------------------------------------------------------
 // RESTORE UI STATE
 // ------------------------------------------------------------
-unitRadios.forEach(r => r.checked = r.value === unit);
-highAccuracyCheckbox.checked = useHighAccuracy;
-
-// ------------------------------------------------------------
-// EVENT LISTENERS
-// ------------------------------------------------------------
-unitRadios.forEach(radio => {
-  radio.addEventListener("change", e => {
-    unit = e.target.value;
-    localStorage.setItem("unit", unit);
+if (highAccuracyCheckbox) {
+  highAccuracyCheckbox.checked = useHighAccuracy;
+  highAccuracyCheckbox.addEventListener("change", e => {
+    useHighAccuracy = e.target.checked;
+    localStorage.setItem("highAccuracy", useHighAccuracy);
+    navigator.geolocation.clearWatch(watchId);
+    startWatching();
   });
-});
-
-highAccuracyCheckbox.addEventListener("change", e => {
-  useHighAccuracy = e.target.checked;
-  localStorage.setItem("highAccuracy", useHighAccuracy);
-
-  navigator.geolocation.clearWatch(watchId);
-  startWatching();
-});
+}
 
 // ------------------------------------------------------------
-// HAVERSINE DISTANCE
+// GEO MATH
 // ------------------------------------------------------------
 function distanceMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -69,54 +56,96 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ------------------------------------------------------------
-// SPEED ENGINE — 30-second baseline method
-// ------------------------------------------------------------
-function addPoint(pos) {
-  const now = Date.now();
-  pointHistory.push({ pos, timestamp: now });
+// Convert lat/lon to local x,y in meters around a reference
+function latLonToXY(lat, lon, lat0, lon0) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
 
-  // Keep only last 30 seconds
-  pointHistory = pointHistory.filter(p => now - p.timestamp <= 30000);
+  const dLat = toRad(lat - lat0);
+  const dLon = toRad(lon - lon0);
+  const meanLat = toRad((lat + lat0) / 2);
+
+  const x = R * dLon * Math.cos(meanLat);
+  const y = R * dLat;
+  return { x, y };
 }
 
-function computeSpeed30s() {
+// ------------------------------------------------------------
+// REGRESSION-BASED SPEED ESTIMATION
+// ------------------------------------------------------------
+function addPointForRegression(pos) {
+  const t = pos.timestamp; // ms
+  const { latitude, longitude, accuracy } = pos.coords;
+
+  pointHistory.push({
+    t,
+    lat: latitude,
+    lon: longitude,
+    acc: accuracy || 10000
+  });
+
   const now = Date.now();
-  if (pointHistory.length < 2) return 0;
+  pointHistory = pointHistory.filter(p => now - p.t <= HISTORY_WINDOW_MS);
+}
 
-  // Target time: 30 seconds ago
-  const targetTime = now - 30000;
+function computeSpeedFromRegression() {
+  if (pointHistory.length < 3) return 0;
 
-  let best = null;
-  let bestDiff = Infinity;
+  // Reference point for local coordinates
+  const ref = pointHistory[0];
+  const lat0 = ref.lat;
+  const lon0 = ref.lon;
+
+  // Build arrays for regression
+  const t0 = pointHistory[0].t / 1000; // seconds
+  const xs = [];
+  const ys = [];
+  const ts = [];
+  const ws = [];
 
   for (const p of pointHistory) {
-    const diff = Math.abs(p.timestamp - targetTime);
-    if (diff < bestDiff) {
-      best = p;
-      bestDiff = diff;
-    }
+    const { x, y } = latLonToXY(p.lat, p.lon, lat0, lon0);
+    const t = p.t / 1000 - t0; // seconds since first point
+
+    // Weight: inverse square of accuracy (but clamp to avoid infinities)
+    const acc = Math.max(p.acc, 1);
+    const w = 1 / (acc * acc);
+
+    xs.push(x);
+    ys.push(y);
+    ts.push(t);
+    ws.push(w);
   }
 
-  // Fallback: earliest point
-  if (!best) best = pointHistory[0];
+  // Weighted linear regression: x(t) and y(t)
+  function weightedSlope(t, v, w) {
+    const n = t.length;
+    if (n < 2) return 0;
 
-  const p1 = best.pos;
-  const p2 = pointHistory[pointHistory.length - 1].pos;
+    let Sw = 0, Swt = 0, Swv = 0, Swtt = 0, Swtv = 0;
+    for (let i = 0; i < n; i++) {
+      const wi = w[i];
+      const ti = t[i];
+      const vi = v[i];
+      Sw += wi;
+      Swt += wi * ti;
+      Swv += wi * vi;
+      Swtt += wi * ti * ti;
+      Swtv += wi * ti * vi;
+    }
 
-  const lat1 = p1.coords.latitude;
-  const lon1 = p1.coords.longitude;
-  const lat2 = p2.coords.latitude;
-  const lon2 = p2.coords.longitude;
+    const denom = Sw * Swtt - Swt * Swt;
+    if (denom === 0) return 0;
 
-  const dt = (p2.timestamp - p1.timestamp) / 1000;
-  if (dt <= 0) return 0;
+    // slope = (Sw * Swtv - Swt * Swv) / denom
+    return (Sw * Swtv - Swt * Swv) / denom;
+  }
 
-  // IMPORTANT: DO NOT FILTER BY ACCURACY
-  // Your phone reports 1414m accuracy, so filtering kills everything.
+  const vx = weightedSlope(ts, xs, ws); // m/s
+  const vy = weightedSlope(ts, ys, ws); // m/s
 
-  const dist = distanceMeters(lat1, lon1, lat2, lon2);
-  return dist / dt;
+  const speed = Math.sqrt(vx * vx + vy * vy);
+  return speed;
 }
 
 // ------------------------------------------------------------
@@ -164,19 +193,19 @@ function startWatching() {
 
       rawEl.textContent = JSON.stringify(pos, null, 2);
 
-      // Add point to 30s history
-      addPoint(pos);
+      // Add to regression history
+      addPointForRegression(pos);
 
-      // Compute speed using 30-second baseline
-      const s = computeSpeed30s();
+      // Compute speed from regression
+      const s = computeSpeedFromRegression();
       const kmh = s * 3.6;
       const mph = s * 2.23694;
 
-      // MULTI-LINE SPEED OUTPUT
+      // Always show all units, multi-line
       speedEl.innerHTML =
-        `${s} m/s<br>` +
-        `${kmh} km/h<br>` +
-        `${mph} mph`;
+        `${s.toFixed(2)} m/s<br>` +
+        `${kmh.toFixed(2)} km/h<br>` +
+        `${mph.toFixed(2)} mph`;
 
       // Reverse geocode occasionally
       const now = Date.now();
