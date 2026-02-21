@@ -4,8 +4,7 @@ const cardinalEl = document.getElementById("cardinal");
 
 function cardinalFromHeading(deg) {
   const dirs = ["N","NE","E","SE","S","SW","W","NW"];
-  const index = Math.round(deg / 45) % 8;
-  return dirs[index];
+  return dirs[Math.round(deg / 45) % 8];
 }
 
 function startCompassSensor() {
@@ -23,27 +22,18 @@ function startCompassSensor() {
       const qz = q[2];
       const qw = q[3];
 
-      // Forward vector from quaternion (no sin/cos)
-      const fx = 2 * (qx * qz + qw * qy);
-      const fz = 1 - 2 * (qx * qx + qy * qy);
+      // Extract yaw (horizontal plane)
+      const siny = 2 * (qw * qz + qx * qy);
+      const cosy = 1 - 2 * (qy * qy + qz * qz);
 
-      const x2 = fx * fx;
-      const z2 = fz * fz;
-      const Q = x2 + z2;
+      // Heading in degrees
+      let heading = Math.atan2(siny, cosy) * 180 / Math.PI;
+      if (heading < 0) heading += 360;
 
-      if (Q === 0) {
-        headingEl.textContent = "N/A";
-        spreadEl.textContent = "N/A";
-        cardinalEl.textContent = "N/A";
-        return;
-      }
-
-      // Rational Trigonometry: spread from North
-      const spread = x2 / Q;
-
-      // Heading in degrees, 0–360, from North clockwise
-      let heading = Math.atan2(fx, fz) * 180 / Math.PI;
-      if (heading < 0) heading = heading + 360;
+      // Spread from North (pure rational trig)
+      const x2 = siny * siny;
+      const y2 = cosy * cosy;
+      const spread = x2 / (x2 + y2);
 
       const cardinal = cardinalFromHeading(heading);
 
