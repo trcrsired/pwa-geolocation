@@ -1,12 +1,16 @@
 const spreadBlueEl  = document.getElementById("spreadBlue");
 const spreadRedEl   = document.getElementById("spreadRed");
 const spreadGreenEl = document.getElementById("spreadGreen");
-const headingEl = document.getElementById("heading");
-const cardinalEl = document.getElementById("cardinal");
+const headingEl     = document.getElementById("heading");
+const cardinalEl    = document.getElementById("cardinal");
 
 let usingMag = false;
 
-// Convert heading degrees → cardinal direction
+/* -------------------------------------------------------
+   CARDINAL + ANGLE UTILITIES
+------------------------------------------------------- */
+
+// Convert heading degrees → emoji cardinal direction
 function cardinalFromHeading(deg) {
   const dirs = ["⬆️","↗️","➡️","↘️","⬇️","↙️","⬅️","↖️"];
   return dirs[Math.round(deg / 45) % 8];
@@ -25,18 +29,15 @@ function headingFromMag(x, y) {
   return normalize(angle);
 }
 
-// Update UI
-function updateUI(heading) {
-  const cardinal = cardinalFromHeading(heading);
+/* -------------------------------------------------------
+   SPREAD ENGINE (PURE RATIONAL TRIG)
+------------------------------------------------------- */
 
-  headingEl.textContent = heading;
-  cardinalEl.textContent = cardinal;
-}
-
-function updateSpreads(x, y) {
+// Compute Blue, Red, Green spreads from vector (x, y)
+function computeSpreads(x, y) {
   const Qx = x*x;
   const Qy = y*y;
-  const Q = Qx + Qy;
+  const Q  = Qx + Qy;
 
   // BLUE geometry spread (Euclidean rational trig)
   const spreadBlue = 1 - Qy / Q;
@@ -48,11 +49,40 @@ function updateSpreads(x, y) {
   // GREEN geometry spread (multiplicative)
   const spreadGreen = Qx / Q;
 
-  // Update UI
+  return { spreadBlue, spreadRed, spreadGreen };
+}
+
+// Convert heading angle → spreads (fallback mode)
+function spreadsFromHeading(headingDeg) {
+  const rad = headingDeg * Math.PI / 180;
+
+  // Unit direction vector from angle
+  const x = Math.sin(rad);  // East component
+  const y = Math.cos(rad);  // North component
+
+  return computeSpreads(x, y);
+}
+
+// Update spreads UI
+function updateSpreadUI({ spreadBlue, spreadRed, spreadGreen }) {
   spreadBlueEl.textContent  = spreadBlue;
   spreadRedEl.textContent   = spreadRed;
   spreadGreenEl.textContent = spreadGreen;
 }
+
+/* -------------------------------------------------------
+   UI UPDATE
+------------------------------------------------------- */
+
+function updateUI(heading) {
+  const cardinal = cardinalFromHeading(heading);
+  headingEl.textContent = heading;
+  cardinalEl.textContent = cardinal;
+}
+
+/* -------------------------------------------------------
+   SENSOR LOGIC
+------------------------------------------------------- */
 
 // Try Magnetometer first
 async function tryMagnetometer() {
@@ -64,9 +94,12 @@ async function tryMagnetometer() {
 
     mag.addEventListener("reading", () => {
       usingMag = true;
-      const { x, y, z } = mag;
-      
-      updateSpreads(x, y);
+      const { x, y } = mag;
+
+      // Compute spreads from magnetometer vector
+      updateSpreadUI(computeSpreads(x, y));
+
+      // Compute heading from magnetometer
       const heading = headingFromMag(x, y);
       updateUI(heading);
     });
@@ -79,36 +112,45 @@ async function tryMagnetometer() {
   }
 }
 
-// Fallback: DeviceOrientation absolute heading
+/* -------------------------------------------------------
+   FALLBACKS
+------------------------------------------------------- */
+
+// DeviceOrientation absolute heading
 function handleAbsoluteOrientation(e) {
   if (typeof e.webkitCompassHeading === "number") {
-    updateUI(e.webkitCompassHeading);
+    const heading = e.webkitCompassHeading;
+    updateUI(heading);
+    updateSpreadUI(spreadsFromHeading(heading));
     return;
   }
 
   if (e.absolute && typeof e.alpha === "number") {
     const heading = normalize(360 - e.alpha);
     updateUI(heading);
+    updateSpreadUI(spreadsFromHeading(heading));
   }
 }
 
-// Fallback: DeviceOrientation alpha only
+// DeviceOrientation alpha fallback
 function handleAlphaFallback(e) {
   if (usingMag) return;
   if (typeof e.alpha === "number") {
     const heading = normalize(360 - e.alpha);
     updateUI(heading);
+    updateSpreadUI(spreadsFromHeading(heading));
   }
 }
+
+/* -------------------------------------------------------
+   STARTUP
+------------------------------------------------------- */
 
 async function startOrientation() {
   const magOK = await tryMagnetometer();
 
   if (!magOK) {
-    // Try absolute orientation
     window.addEventListener("deviceorientationabsolute", handleAbsoluteOrientation);
-
-    // Fallback alpha
     window.addEventListener("deviceorientation", handleAlphaFallback);
   }
 }
