@@ -17,9 +17,10 @@ const highAccuracyCheckbox = document.getElementById("highAccuracy");
 let unit = localStorage.getItem("unit") || "metric";
 let useHighAccuracy = localStorage.getItem("highAccuracy") === "false" ? false : true;
 
-let lastPos = null;
-let lastTime = null;
 let watchId = null;
+
+// Store last 5 points
+let history = [];   // each entry: { lat, lon, timestamp }
 
 // ------------------------------------------------------------
 // RESTORE UI STATE
@@ -44,7 +45,6 @@ highAccuracyCheckbox.addEventListener("change", e => {
   useHighAccuracy = e.target.checked;
   localStorage.setItem("highAccuracy", useHighAccuracy);
 
-  // Restart geolocation watcher
   navigator.geolocation.clearWatch(watchId);
   startWatching();
 });
@@ -68,33 +68,29 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ------------------------------------------------------------
-// SPEED CALCULATION
+// SPEED CALCULATION USING LAST 5 POINTS
 // ------------------------------------------------------------
-function computeSpeed(pos) {
-  const { latitude, longitude, altitude, accuracy, speed } = pos.coords;
-  const now = pos.timestamp;
+function computeSpeedFromHistory() {
+  if (history.length < 2) return 0;
 
-  latEl.textContent = latitude;
-  lonEl.textContent = longitude;
-  altEl.textContent = altitude ?? "N/A";
-  accEl.textContent = accuracy;
+  let totalDist = 0;
+  let totalTime = 0;
 
-  if (speed !== null && !isNaN(speed)) return speed;
+  for (let i = 1; i < history.length; i++) {
+    const p1 = history[i - 1];
+    const p2 = history[i];
 
-  if (lastPos && lastTime) {
-    const dt = (now - lastTime) / 1000;
+    const dist = distanceMeters(p1.lat, p1.lon, p2.lat, p2.lon);
+    const dt = (p2.timestamp - p1.timestamp) / 1000;
+
     if (dt > 0) {
-      const dist = distanceMeters(
-        lastPos.latitude,
-        lastPos.longitude,
-        latitude,
-        longitude
-      );
-      return dist / dt;
+      totalDist += dist;
+      totalTime += dt;
     }
   }
 
-  return 0;
+  if (totalTime === 0) return 0;
+  return totalDist / totalTime; // m/s
 }
 
 // ------------------------------------------------------------
@@ -103,11 +99,26 @@ function computeSpeed(pos) {
 function startWatching() {
   watchId = navigator.geolocation.watchPosition(
     pos => {
-      const s = computeSpeed(pos);
+      const { latitude, longitude, altitude, accuracy } = pos.coords;
 
-      lastPos = pos.coords;
-      lastTime = pos.timestamp;
+      // Update UI
+      latEl.textContent = latitude;
+      lonEl.textContent = longitude;
+      altEl.textContent = altitude ?? "N/A";
+      accEl.textContent = accuracy;
 
+      // Add to history
+      history.push({
+        lat: latitude,
+        lon: longitude,
+        timestamp: pos.timestamp
+      });
+
+      // Keep only last 5 points
+      if (history.length > 5) history.shift();
+
+      // Compute speed
+      const s = computeSpeedFromHistory();
       const kmh = s * 3.6;
       const mph = s * 2.23694;
 
