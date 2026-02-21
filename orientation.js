@@ -2,6 +2,13 @@ const headingEl = document.getElementById("heading");
 const spreadEl = document.getElementById("spread");
 const cardinalEl = document.getElementById("cardinal");
 
+// Convert heading degrees → cardinal direction
+function cardinalFromHeading(deg) {
+  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+// Compute forward vector from quaternion
 function forwardFromQuaternion(qx, qy, qz, qw) {
   const fx = 2 * (qx * qz + qw * qy);
   const fy = 2 * (qy * qz - qw * qx);
@@ -9,35 +16,7 @@ function forwardFromQuaternion(qx, qy, qz, qw) {
   return { fx, fy, fz };
 }
 
-function horizontalFromForward(fx, fz) {
-  return { hx: fx, hz: fz };
-}
-
-function spreadFromHorizontal(hx, hz) {
-  const Qh = hx * hx + hz * hz;
-  if (Qh === 0) return null;
-  const dot = hz;
-  return 1 - (dot * dot) / Qh;
-}
-
-function cardinalFromHorizontal(hx, hz) {
-  const Qx = hx * hx;
-  const Qz = hz * hz;
-
-  if (Qx === 0 && Qz === 0) return "N/A";
-
-  const xPos = hx >= 0;
-  const zPos = hz >= 0;
-
-  if (Qz > Qx) {
-    if (Qx * 3 < Qz) return zPos ? "N" : "S";
-    return zPos ? (xPos ? "NE" : "NW") : (xPos ? "SE" : "SW");
-  } else {
-    if (Qz * 3 < Qx) return xPos ? "E" : "W";
-    return xPos ? (zPos ? "NE" : "SE") : (zPos ? "NW" : "SW");
-  }
-}
-
+// Update UI from quaternion
 function updateOrientation(q) {
   if (!q) {
     headingEl.textContent = "N/A";
@@ -48,17 +27,29 @@ function updateOrientation(q) {
 
   const [qx, qy, qz, qw] = q;
 
+  // Forward vector
   const { fx, fy, fz } = forwardFromQuaternion(qx, qy, qz, qw);
-  const { hx, hz } = horizontalFromForward(fx, fz);
 
-  const spread = spreadFromHorizontal(hx, hz);
-  const cardinal = cardinalFromHorizontal(hx, hz);
+  // Horizontal projection
+  const hx = fx;
+  const hz = fz;
 
-  headingEl.textContent = `hx=${hx}, hz=${hz}`;
+  // Heading angle: 0° = North, 90° = East
+  let heading = Math.atan2(hx, hz) * 180 / Math.PI;
+  if (heading < 0) heading += 360;
+
+  // Spread = sin^2(theta)
+  const rad = heading * Math.PI / 180;
+  const spread = Math.sin(rad) ** 2;
+
+  const cardinal = cardinalFromHeading(heading);
+
+  headingEl.textContent = heading;
   spreadEl.textContent = spread;
   cardinalEl.textContent = cardinal;
 }
 
+// Start sensor
 function startOrientation() {
   if (!("AbsoluteOrientationSensor" in window)) {
     updateOrientation(null);
@@ -67,9 +58,11 @@ function startOrientation() {
 
   try {
     const sensor = new AbsoluteOrientationSensor({ frequency: 30 });
+
     sensor.addEventListener("reading", () => {
       updateOrientation(sensor.quaternion);
     });
+
     sensor.start();
   } catch (e) {
     console.warn("AbsoluteOrientationSensor failed:", e);
