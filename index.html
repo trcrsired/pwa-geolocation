@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>PWA Geolocation</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+
+  <!-- Auto theme -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body>
+
+<h1>PWA Geolocation</h1>
+
+<div class="unit-toggle">
+  <label><input type="radio" name="unit" value="metric" checked> m/s & km/h</label>
+  <label><input type="radio" name="unit" value="imperial"> mph</label>
+</div>
+
+<div class="value">Speed: <span id="speed">0</span></div>
+
+<h3>Real‑time Coordinates</h3>
+<div>Latitude: <span id="lat">-</span></div>
+<div>Longitude: <span id="lon">-</span></div>
+<div>Altitude: <span id="alt">-</span></div>
+<div>Accuracy: <span id="acc">-</span> m</div>
+
+<h3>Raw Position Data</h3>
+<pre id="raw"></pre>
+
+<footer>
+  <p>
+    <a href="https://github.com/trcrsired/pwa-geolocation" target="_blank">
+      GitHub: trcrsired/pwa-geolocation
+    </a>
+  </p>
+  <p>License: GPL‑3.0</p>
+  <p id="year"></p>
+</footer>
+
+<script src="/app.js"></script>
+<script src="/sw-register.js"></script>
+<script src="/year.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "PWA Geolocation",
+  "short_name": "PWA Geolocation",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/logo.webp",
+      "sizes": "512x512",
+      "type": "image/webp"
+    }
+  ]
+}

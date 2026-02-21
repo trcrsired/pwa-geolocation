@@ -1,0 +1,28 @@
+:root {
+  --bg: #ffffff;
+  --fg: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --fg: #ffffff;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  padding: 20px;
+  line-height: 1.6;
+}
+
+.value {
+  font-size: 1.8rem;
+  margin: 10px 0;
+}
+
+.unit-toggle label {
+  margin-right: 15px;
+}
