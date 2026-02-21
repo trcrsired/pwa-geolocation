@@ -35,8 +35,12 @@
 <div>Longitude: <span id="lon">-</span></div>
 <div>Altitude: <span id="alt">-</span></div>
 <div>Accuracy: <span id="acc">-</span> m</div>
-<div>Direction: <span id="heading">-</span>°</div>
 <div>Location Name: <span id="place">Unknown location</span></div>
+
+<h3>Orientation</h3>
+<div>Heading (°): <span id="heading">N/A</span></div>
+<div>Cardinal Direction: <span id="cardinal">N/A</span></div>
+<div>Spread from North: <span id="spread">N/A</span></div>
 
 <h3>Raw Position Data</h3>
 <pre id="raw"></pre>
@@ -52,13 +56,14 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="orientation.js"></script>
 <script src="sw-register.js"></script>
 
 <script>
   const startYear = 2026;
   const currentYear = new Date().getFullYear();
   document.getElementById("year").textContent =
-    startYear === currentYear ? `${currentYear}` : `${startYear}–${currentYear}`;
+    startYear === currentYear ? String(currentYear) : `${startYear}–${currentYear}`;
 </script>
 
 </body>

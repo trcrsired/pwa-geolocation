@@ -7,6 +7,7 @@ const CACHE_NAME = "pwa-geolocation-v7";
 const ASSETS = [
   "/",
   "/app.js",
+  "/orientation.js",
   "/styles.css",
   "/manifest.json",
   "/sw-register.js",
