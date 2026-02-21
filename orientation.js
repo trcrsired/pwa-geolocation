@@ -39,7 +39,7 @@ function computeSpreads(x, y) {
   const Qy = y*y;
   const Q  = Qx + Qy;
 
-  // BLUE geometry spread (always defined)
+  // BLUE geometry spread (Euclidean)
   const spreadBlue = 1 - Qy / Q;
 
   // RED geometry spread (Minkowski)
@@ -48,11 +48,15 @@ function computeSpreads(x, y) {
     ? "N/A (null line)"
     : 1 + Qy / Qred;
 
-  // GREEN geometry spread (multiplicative)
-  const Qgreen = x * y;
-  const spreadGreen = (Qgreen === 0)
+  // GREEN geometry spread (multiplicative, reference ray = NE = (1, 1))
+  const x2 = x, y2 = y;
+
+  const numerator   = y2 - x2;              // x1*y2 - x2*y1
+  const denominator = 4 * x2 * y2;      // 4*x1*x2*y1*y2
+
+  const spreadGreen = (denominator === 0)
     ? "N/A (null line)"
-    : Qx / Q;
+    : 1 - (numerator * numerator) / denominator;
 
   return { spreadBlue, spreadRed, spreadGreen };
 }
