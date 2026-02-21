@@ -112,8 +112,8 @@ function computeSpeed30s() {
   const dt = (p2.timestamp - p1.timestamp) / 1000;
   if (dt <= 0) return 0;
 
-  // Skip extremely inaccurate points
-  if (p1.coords.accuracy > 100 || p2.coords.accuracy > 100) return 0;
+  // IMPORTANT: DO NOT FILTER BY ACCURACY
+  // Your phone reports 1414m accuracy, so filtering kills everything.
 
   const dist = distanceMeters(lat1, lon1, lat2, lon2);
   return dist / dt;
@@ -174,9 +174,9 @@ function startWatching() {
 
       // MULTI-LINE SPEED OUTPUT
       speedEl.innerHTML =
-        `${s} m/s<br>` +
-        `${kmh} km/h<br>` +
-        `${mph} mph`;
+        `${s.toFixed(2)} m/s<br>` +
+        `${kmh.toFixed(2)} km/h<br>` +
+        `${mph.toFixed(2)} mph`;
 
       // Reverse geocode occasionally
       const now = Date.now();
