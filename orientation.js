@@ -1,5 +1,7 @@
+const spreadBlueEl  = document.getElementById("spreadBlue");
+const spreadRedEl   = document.getElementById("spreadRed");
+const spreadGreenEl = document.getElementById("spreadGreen");
 const headingEl = document.getElementById("heading");
-const spreadEl = document.getElementById("spread");
 const cardinalEl = document.getElementById("cardinal");
 
 let usingMag = false;
@@ -47,9 +49,9 @@ function updateSpreads(x, y) {
   const spreadGreen = Qx / Q;
 
   // Update UI
-  document.getElementById("spreadBlue").textContent = spreadBlue;
-  document.getElementById("spreadRed").textContent = spreadRed;
-  document.getElementById("spreadGreen").textContent = spreadGreen;
+  spreadBlueEl.textContent  = spreadBlue;
+  spreadRedEl.textContent   = spreadRed;
+  spreadGreenEl.textContent = spreadGreen;
 }
 
 // Try Magnetometer first
