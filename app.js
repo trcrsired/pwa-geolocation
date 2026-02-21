@@ -174,9 +174,9 @@ function startWatching() {
 
       // MULTI-LINE SPEED OUTPUT
       speedEl.innerHTML =
-        `${s.toFixed(2)} m/s<br>` +
-        `${kmh.toFixed(2)} km/h<br>` +
-        `${mph.toFixed(2)} mph`;
+        `${s} m/s<br>` +
+        `${kmh} km/h<br>` +
+        `${mph} mph`;
 
       // Reverse geocode occasionally
       const now = Date.now();
