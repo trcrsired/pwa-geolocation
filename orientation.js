@@ -6,7 +6,7 @@ let usingMag = false;
 
 // Convert heading degrees → cardinal direction
 function cardinalFromHeading(deg) {
-  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  const dirs = ["⬆️","↗️","➡️","↘️","⬇️","↙️","⬅️","↖️"];
   return dirs[Math.round(deg / 45) % 8];
 }
 
