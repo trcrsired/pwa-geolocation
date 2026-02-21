@@ -2,25 +2,10 @@ const headingEl = document.getElementById("heading");
 const spreadEl = document.getElementById("spread");
 const cardinalEl = document.getElementById("cardinal");
 
-// Decide cardinal direction using only signs + spread
-function cardinalFromVector(fx, fz) {
-  const x2 = fx * fx;
-  const z2 = fz * fz;
-  const Q = x2 + z2;
-  if (Q === 0) return "N/A";
-
-  const sN = x2 / Q; // spread from North
-
-  const northSouth = fz >= 0 ? "N" : "S";
-  const eastWest = fx >= 0 ? "E" : "W";
-
-  if (sN < 0.25) {
-    return northSouth;          // closer to N or S
-  } else if (sN > 0.75) {
-    return eastWest;            // closer to E or W
-  } else {
-    return northSouth + eastWest; // diagonal: NE, SE, SW, NW
-  }
+function cardinalFromHeading(deg) {
+  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  const index = Math.round(deg / 45) % 8;
+  return dirs[index];
 }
 
 function startCompassSensor() {
@@ -38,7 +23,7 @@ function startCompassSensor() {
       const qz = q[2];
       const qw = q[3];
 
-      // Forward vector from quaternion (no trig)
+      // Forward vector from quaternion (no sin/cos)
       const fx = 2 * (qx * qz + qw * qy);
       const fz = 1 - 2 * (qx * qx + qy * qy);
 
@@ -53,11 +38,16 @@ function startCompassSensor() {
         return;
       }
 
-      const spread = x2 / Q; // spread from North
-      const cardinal = cardinalFromVector(fx, fz);
+      // Rational Trigonometry: spread from North
+      const spread = x2 / Q;
 
-      // No numeric heading here: pure rational geometry
-      headingEl.textContent = "N/A";
+      // Heading in degrees, 0–360, from North clockwise
+      let heading = Math.atan2(fx, fz) * 180 / Math.PI;
+      if (heading < 0) heading = heading + 360;
+
+      const cardinal = cardinalFromHeading(heading);
+
+      headingEl.textContent = heading;
       spreadEl.textContent = spread;
       cardinalEl.textContent = cardinal;
     });
