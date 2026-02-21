@@ -22,15 +22,13 @@ function startCompassSensor() {
       const qz = q[2];
       const qw = q[3];
 
-      // Extract yaw (horizontal plane)
-      const siny = 2 * (qw * qz + qx * qy);
-      const cosy = 1 - 2 * (qy * qy + qz * qz);
+      // *** FIXED AXIS MAPPING ***
+      const siny = 2 * (qw * qy - qx * qz);
+      const cosy = 1 - 2 * (qx*qx + qy*qy);
 
-      // Heading in degrees
       let heading = Math.atan2(siny, cosy) * 180 / Math.PI;
       if (heading < 0) heading += 360;
 
-      // Spread from North (pure rational trig)
       const x2 = siny * siny;
       const y2 = cosy * cosy;
       const spread = x2 / (x2 + y2);
