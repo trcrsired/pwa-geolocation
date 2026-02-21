@@ -2,59 +2,80 @@ const headingEl = document.getElementById("heading");
 const spreadEl = document.getElementById("spread");
 const cardinalEl = document.getElementById("cardinal");
 
+// Convert heading degrees → cardinal direction
 function cardinalFromHeading(deg) {
   const dirs = ["N","NE","E","SE","S","SW","W","NW"];
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function startCompassSensor() {
-  if (!("AbsoluteOrientationSensor" in window)) return false;
+// Update UI with heading, cardinal, spread
+function updateOrientation(headingDeg) {
+  if (headingDeg == null || isNaN(headingDeg)) {
+    headingEl.textContent = "N/A";
+    spreadEl.textContent = "N/A";
+    cardinalEl.textContent = "N/A";
+    return;
+  }
 
-  try {
-    const sensor = new AbsoluteOrientationSensor({ frequency: 30 });
+  // Normalize to 0–360
+  let h = headingDeg % 360;
+  if (h < 0) h += 360;
 
-    sensor.addEventListener("reading", () => {
-      const q = sensor.quaternion;
-      if (!q) return;
+  // Spread from North = sin^2(theta)
+  // (We accept trig here because DeviceOrientation gives angles, not vectors)
+  const rad = h * Math.PI / 180;
+  const s = Math.sin(rad);
+  const spread = s * s;
 
-      const qx = q[0];
-      const qy = q[1];
-      const qz = q[2];
-      const qw = q[3];
+  const cardinal = cardinalFromHeading(h);
 
-      // *** FIXED AXIS MAPPING ***
-      const siny = 2 * (qw * qy - qx * qz);
-      const cosy = 1 - 2 * (qx*qx + qy*qy);
+  headingEl.textContent = h;
+  spreadEl.textContent = spread;
+  cardinalEl.textContent = cardinal;
+}
 
-      let heading = Math.atan2(siny, cosy) * 180 / Math.PI;
-      if (heading < 0) heading += 360;
+// Handle orientation event
+function handleOrientation(e) {
+  // iOS Safari provides a real compass heading
+  if (typeof e.webkitCompassHeading === "number") {
+    updateOrientation(e.webkitCompassHeading);
+    return;
+  }
 
-      const x2 = siny * siny;
-      const y2 = cosy * cosy;
-      const spread = x2 / (x2 + y2);
+  // Most Android browsers: alpha = rotation around Z axis
+  if (typeof e.alpha === "number") {
+    // Convert alpha (0° = East on some devices) → heading (0° = North)
+    // Standard correction: heading = 360 - alpha
+    const heading = 360 - e.alpha;
+    updateOrientation(heading);
+    return;
+  }
 
-      const cardinal = cardinalFromHeading(heading);
+  updateOrientation(null);
+}
 
-      headingEl.textContent = heading;
-      spreadEl.textContent = spread;
-      cardinalEl.textContent = cardinal;
-    });
+// Start orientation tracking
+function startOrientation() {
+  if (!("DeviceOrientationEvent" in window)) {
+    updateOrientation(null);
+    return;
+  }
 
-    sensor.start();
-    return true;
-
-  } catch (e) {
-    console.warn("AbsoluteOrientationSensor failed:", e);
-    return false;
+  // iOS permission flow
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then(state => {
+        if (state === "granted") {
+          window.addEventListener("deviceorientation", handleOrientation);
+        } else {
+          updateOrientation(null);
+        }
+      })
+      .catch(() => updateOrientation(null));
+  } else {
+    // Android / desktop
+    window.addEventListener("deviceorientation", handleOrientation);
   }
 }
 
-function startCompassFallback() {
-  headingEl.textContent = "N/A";
-  spreadEl.textContent = "N/A";
-  cardinalEl.textContent = "N/A";
-}
-
-if (!startCompassSensor()) {
-  startCompassFallback();
-}
+startOrientation();
