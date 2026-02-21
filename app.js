@@ -234,9 +234,9 @@ function handlePosition(pos) {
 
   // Multi-line output, no toFixed
   speedEl.innerHTML =
-    displaySpeed + " m/s<br>" +
-    kmh + " km/h<br>" +
-    mph + " mph";
+    "<br>m/s:" + displaySpeed + "<br>km/h:" +
+    kmh + "<br>mph:" +
+    mph;
 
 
   // Reverse geocode occasionally
