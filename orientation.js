@@ -2,79 +2,78 @@ const headingEl = document.getElementById("heading");
 const spreadEl = document.getElementById("spread");
 const cardinalEl = document.getElementById("cardinal");
 
-// Convert heading degrees → cardinal direction
-function cardinalFromHeading(deg) {
-  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
-  return dirs[Math.round(deg / 45) % 8];
+function forwardFromQuaternion(qx, qy, qz, qw) {
+  const fx = 2 * (qx * qz + qw * qy);
+  const fy = 2 * (qy * qz - qw * qx);
+  const fz = 1 - 2 * (qx * qx + qy * qy);
+  return { fx, fy, fz };
 }
 
-// Update UI with heading, cardinal, spread
-function updateOrientation(headingDeg) {
-  if (headingDeg == null || isNaN(headingDeg)) {
+function horizontalFromForward(fx, fz) {
+  return { hx: fx, hz: fz };
+}
+
+function spreadFromHorizontal(hx, hz) {
+  const Qh = hx * hx + hz * hz;
+  if (Qh === 0) return null;
+  const dot = hz;
+  return 1 - (dot * dot) / Qh;
+}
+
+function cardinalFromHorizontal(hx, hz) {
+  const Qx = hx * hx;
+  const Qz = hz * hz;
+
+  if (Qx === 0 && Qz === 0) return "N/A";
+
+  const xPos = hx >= 0;
+  const zPos = hz >= 0;
+
+  if (Qz > Qx) {
+    if (Qx * 3 < Qz) return zPos ? "N" : "S";
+    return zPos ? (xPos ? "NE" : "NW") : (xPos ? "SE" : "SW");
+  } else {
+    if (Qz * 3 < Qx) return xPos ? "E" : "W";
+    return xPos ? (zPos ? "NE" : "SE") : (zPos ? "NW" : "SW");
+  }
+}
+
+function updateOrientation(q) {
+  if (!q) {
     headingEl.textContent = "N/A";
     spreadEl.textContent = "N/A";
     cardinalEl.textContent = "N/A";
     return;
   }
 
-  // Normalize to 0–360
-  let h = headingDeg % 360;
-  if (h < 0) h += 360;
+  const [qx, qy, qz, qw] = q;
 
-  // Spread from North = sin^2(theta)
-  // (We accept trig here because DeviceOrientation gives angles, not vectors)
-  const rad = h * Math.PI / 180;
-  const s = Math.sin(rad);
-  const spread = s * s;
+  const { fx, fy, fz } = forwardFromQuaternion(qx, qy, qz, qw);
+  const { hx, hz } = horizontalFromForward(fx, fz);
 
-  const cardinal = cardinalFromHeading(h);
+  const spread = spreadFromHorizontal(hx, hz);
+  const cardinal = cardinalFromHorizontal(hx, hz);
 
-  headingEl.textContent = h;
+  headingEl.textContent = `hx=${hx}, hz=${hz}`;
   spreadEl.textContent = spread;
   cardinalEl.textContent = cardinal;
 }
 
-// Handle orientation event
-function handleOrientation(e) {
-  // iOS Safari provides a real compass heading
-  if (typeof e.webkitCompassHeading === "number") {
-    updateOrientation(e.webkitCompassHeading);
-    return;
-  }
-
-  // Most Android browsers: alpha = rotation around Z axis
-  if (typeof e.alpha === "number") {
-    // Convert alpha (0° = East on some devices) → heading (0° = North)
-    // Standard correction: heading = 360 - alpha
-    const heading = 360 - e.alpha;
-    updateOrientation(heading);
-    return;
-  }
-
-  updateOrientation(null);
-}
-
-// Start orientation tracking
 function startOrientation() {
-  if (!("DeviceOrientationEvent" in window)) {
+  if (!("AbsoluteOrientationSensor" in window)) {
     updateOrientation(null);
     return;
   }
 
-  // iOS permission flow
-  if (typeof DeviceOrientationEvent.requestPermission === "function") {
-    DeviceOrientationEvent.requestPermission()
-      .then(state => {
-        if (state === "granted") {
-          window.addEventListener("deviceorientation", handleOrientation);
-        } else {
-          updateOrientation(null);
-        }
-      })
-      .catch(() => updateOrientation(null));
-  } else {
-    // Android / desktop
-    window.addEventListener("deviceorientation", handleOrientation);
+  try {
+    const sensor = new AbsoluteOrientationSensor({ frequency: 30 });
+    sensor.addEventListener("reading", () => {
+      updateOrientation(sensor.quaternion);
+    });
+    sensor.start();
+  } catch (e) {
+    console.warn("AbsoluteOrientationSensor failed:", e);
+    updateOrientation(null);
   }
 }
 
