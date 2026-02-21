@@ -2,34 +2,33 @@
 // UI ELEMENTS
 // ------------------------------------------------------------
 const speedEl = document.getElementById("speed");
-const tsEl = document.getElementById("ts");
 const latEl = document.getElementById("lat");
 const lonEl = document.getElementById("lon");
 const altEl = document.getElementById("alt");
 const accEl = document.getElementById("acc");
+const tsEl = document.getElementById("ts");
+const placeEl = document.getElementById("place");
 const rawEl = document.getElementById("raw");
 
 const unitRadios = document.querySelectorAll("input[name='unit']");
 const highAccuracyCheckbox = document.getElementById("highAccuracy");
 
 // ------------------------------------------------------------
-// STATE (with defaults)
+// STATE
 // ------------------------------------------------------------
 let unit = localStorage.getItem("unit") || "metric";
 let useHighAccuracy = localStorage.getItem("highAccuracy") === "false" ? false : true;
 
 let watchId = null;
+let history = []; // last 5 raw pos objects
 
-// Store last 5 points
-let history = [];   // each entry: { lat, lon, timestamp }
+let lastReverseGeocodeTime = 0;
+const REVERSE_GEOCODE_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 // ------------------------------------------------------------
 // RESTORE UI STATE
 // ------------------------------------------------------------
-unitRadios.forEach(radio => {
-  radio.checked = radio.value === unit;
-});
-
+unitRadios.forEach(r => r.checked = r.value === unit);
 highAccuracyCheckbox.checked = useHighAccuracy;
 
 // ------------------------------------------------------------
@@ -51,7 +50,7 @@ highAccuracyCheckbox.addEventListener("change", e => {
 });
 
 // ------------------------------------------------------------
-// HAVERSINE DISTANCE (meters)
+// HAVERSINE DISTANCE
 // ------------------------------------------------------------
 function distanceMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -69,7 +68,7 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ------------------------------------------------------------
-// SPEED CALCULATION USING LAST 5 POINTS
+// ACCURACY-AWARE SPEED FROM LAST 5 POINTS
 // ------------------------------------------------------------
 function computeSpeedFromHistory() {
   if (history.length < 2) return 0;
@@ -77,7 +76,7 @@ function computeSpeedFromHistory() {
   let totalDist = 0;
   let totalTime = 0;
 
-  for (let i = 1; i < history.length; ++i) {
+  for (let i = 1; i < history.length; i++) {
     const p1 = history[i - 1];
     const p2 = history[i];
 
@@ -94,10 +93,7 @@ function computeSpeedFromHistory() {
 
     if (dt <= 0) continue;
 
-    // Combined accuracy envelope
     const combinedAccuracy = acc1 + acc2;
-
-    // Effective distance: subtract noise radius
     const effectiveDist = Math.max(0, dist - combinedAccuracy);
 
     totalDist += effectiveDist;
@@ -105,9 +101,37 @@ function computeSpeedFromHistory() {
   }
 
   if (totalTime === 0) return 0;
-  return totalDist / totalTime; // m/s
+  return totalDist / totalTime;
 }
 
+// ------------------------------------------------------------
+// REVERSE GEOCODING (OpenStreetMap)
+// ------------------------------------------------------------
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "pwa-geolocation/1.0 (https://github.com/trcrsired/pwa-geolocation)"
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return "Unknown location";
+
+    const data = await res.json();
+    return data.display_name || "Unknown location";
+
+  } catch (e) {
+    return "Unknown location";
+  }
+}
 
 // ------------------------------------------------------------
 // START WATCHING POSITION
@@ -117,41 +141,43 @@ function startWatching() {
     pos => {
       const { latitude, longitude, altitude, accuracy } = pos.coords;
 
-      // Update UI
       tsEl.textContent = new Date(pos.timestamp).toISOString();
       latEl.textContent = latitude;
       lonEl.textContent = longitude;
       altEl.textContent = altitude ?? "N/A";
       accEl.textContent = accuracy;
 
-      // Add to history
+      rawEl.textContent = JSON.stringify(pos, null, 2);
+
       history.push(pos);
-
-
-      // Keep only last 5 points
       if (history.length > 5) history.shift();
 
-      // Compute speed
       const s = computeSpeedFromHistory();
       const kmh = s * 3.6;
       const mph = s * 2.23694;
 
       if (unit === "metric") {
-        speedEl.textContent = s + " m/s (" + kmh + " km/h)";
+        speedEl.textContent = `${s} m/s (${kmh} km/h)`;
       } else {
-        speedEl.textContent =
-          s + " m/s (" + kmh + " km/h, " + mph + " mph)";
+        speedEl.textContent = `${s} m/s (${kmh} km/h, ${mph} mph)`;
       }
 
-      rawEl.textContent = JSON.stringify(pos, null, 2);
+      const now = Date.now();
+      if (now - lastReverseGeocodeTime > REVERSE_GEOCODE_INTERVAL) {
+        lastReverseGeocodeTime = now;
+
+        reverseGeocode(latitude, longitude).then(name => {
+          placeEl.textContent = name;
+        });
+      }
     },
     err => {
-      speedEl.textContent = "N/A";
+      speedEl.textContent = "Error: " + err.message;
     },
     {
       enableHighAccuracy: useHighAccuracy,
       maximumAge: 500,
-      timeout: 50000
+      timeout: 5000
     }
   );
 }

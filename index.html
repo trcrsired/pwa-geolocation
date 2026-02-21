@@ -6,10 +6,9 @@
 
   <title>PWA Geolocation</title>
 
-  <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
 
-  <!-- Auto theme -->
   <meta name="color-scheme" content="light dark">
 </head>
 <body>
@@ -28,7 +27,7 @@
   </label>
 </div>
 
-<div class="value">Speed: <span id="speed">-</span></div>
+<div class="value">Speed: <span id="speed">0</span></div>
 
 <h3>Real‑time Coordinates</h3>
 <div>Timestamp: <span id="ts">-</span></div>
@@ -36,6 +35,7 @@
 <div>Longitude: <span id="lon">-</span></div>
 <div>Altitude: <span id="alt">-</span></div>
 <div>Accuracy: <span id="acc">-</span> m</div>
+<div>Location Name: <span id="place">Unknown location</span></div>
 
 <h3>Raw Position Data</h3>
 <pre id="raw"></pre>
@@ -50,8 +50,15 @@
   <p id="year"></p>
 </footer>
 
-<script src="/app.js"></script>
-<script src="/sw-register.js"></script>
-<script src="/year.js"></script>
+<script src="app.js"></script>
+<script src="sw-register.js"></script>
+
+<script>
+  const startYear = 2026;
+  const currentYear = new Date().getFullYear();
+  document.getElementById("year").textContent =
+    startYear === currentYear ? `${currentYear}` : `${startYear}–${currentYear}`;
+</script>
+
 </body>
 </html>
