@@ -25,13 +25,31 @@ function headingFromMag(x, y) {
 
 // Update UI
 function updateUI(heading) {
-  const rad = heading * Math.PI / 180;
-  const spread = Math.sin(rad) ** 2;
   const cardinal = cardinalFromHeading(heading);
 
   headingEl.textContent = heading;
-  spreadEl.textContent = spread;
   cardinalEl.textContent = cardinal;
+}
+
+function updateSpreads(x, y) {
+  const Qx = x*x;
+  const Qy = y*y;
+  const Q = Qx + Qy;
+
+  // BLUE geometry spread (Euclidean rational trig)
+  const spreadBlue = 1 - Qy / Q;
+
+  // RED geometry spread (Minkowski)
+  const Qred = Qx - Qy;
+  const spreadRed = (Qred !== 0) ? 1 + Qy / Qred : "N/A";
+
+  // GREEN geometry spread (multiplicative)
+  const spreadGreen = Qx / Q;
+
+  // Update UI
+  document.getElementById("spreadBlue").textContent = spreadBlue;
+  document.getElementById("spreadRed").textContent = spreadRed;
+  document.getElementById("spreadGreen").textContent = spreadGreen;
 }
 
 // Try Magnetometer first
@@ -45,6 +63,8 @@ async function tryMagnetometer() {
     mag.addEventListener("reading", () => {
       usingMag = true;
       const { x, y, z } = mag;
+      
+      updateSpreads(x, y);
       const heading = headingFromMag(x, y);
       updateUI(heading);
     });
