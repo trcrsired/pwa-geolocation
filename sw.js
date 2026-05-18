@@ -1,18 +1,18 @@
 // -------------------------------
 //  CONFIG
 // -------------------------------
-const CACHE_NAME = "pwa-geolocation-v37";
+const CACHE_NAME = "pwa-geolocation-v39";
 
 // Files to cache
 const ASSETS = [
-  "/",
-  "/app.js",
-  "/orientation.js",
-  "/styles.css",
-  "/manifest.json",
-  "/sw-register.js",
-  "/logo.webp",
-  "/year.js",
+  "./",
+  "./app.js",
+  "./orientation.js",
+  "./styles.css",
+  "./manifest.json",
+  "./sw-register.js",
+  "./logo.webp",
+  "./year.js",
 ];
 
 // -------------------------------
